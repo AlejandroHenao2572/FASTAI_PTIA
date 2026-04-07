@@ -227,7 +227,8 @@ Output
  P21 BOT    Cadillac                      20    16.64
  P22 ALO    Aston Martin                  21    17.52
 =================================================================
-
-Resultados reales:  
 ```
+Resultados reales:  
+![alt text](img/image.png)
+
 >El modelo predijo correctamente el resultado de las primeras 5 posiciones del grand Prix de japon 2026
