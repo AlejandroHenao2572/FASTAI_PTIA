@@ -229,6 +229,5 @@ Output
 =================================================================
 
 Resultados reales:  
-![alt text](img/image.png)
 ```
 >El modelo predijo correctamente el resultado de las primeras 5 posiciones del grand Prix de japon 2026
