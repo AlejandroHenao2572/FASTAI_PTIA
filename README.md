@@ -92,7 +92,7 @@ python main.py --seasons 2023 2024 2025
 
 Los datos se cachean en `data/cache/`. Reentrenamientos posteriores toman segundos.
 
-### Predecir una carrera
+### Predecir una carrera (CLI)
 
 La clasificación del GP debe haber ocurrido antes de correr `predict.py` (se descarga de FastF1).
 
@@ -101,6 +101,99 @@ python predict.py --race "Monaco" --year 2026
 python predict.py --race 6 --year 2026          # por número de ronda
 python predict.py --race "Monaco" --year 2026 --model models/saved/model.pkl
 ```
+
+### Levantar la API REST (para el frontend)
+
+```bash
+uvicorn api:app --reload --host 0.0.0.0 --port 8000
+```
+
+Docs interactivas disponibles en `http://localhost:8000/docs` (Swagger UI).
+
+---
+
+## API REST
+
+El archivo `api.py` expone el pipeline como endpoints HTTP usando **FastAPI**.
+
+### Endpoints
+
+#### `GET /api/status`
+Estado del modelo y métricas del último entrenamiento.
+
+```json
+{
+  "model_available": true,
+  "model_file": "xgboost_model_20260517_175003.pkl",
+  "stats_available": true,
+  "training_metrics": {
+    "seasons": [2023, 2024, 2025],
+    "train_samples": 1318,
+    "mae": 3.5801,
+    "rmse": 4.8444,
+    "top3_accuracy": 0.6667,
+    "trained_at": "2026-05-17T17:50:03"
+  }
+}
+```
+
+#### `GET /api/circuits`
+Lista de 24 circuitos disponibles.
+
+```json
+{
+  "circuits": [
+    {
+      "display_name": "Azerbaijan — Baku City Circuit",
+      "value": "Azerbaijan",
+      "circuit_key": "baku",
+      "city": "Baku",
+      "circuit_type": 1
+    }
+  ]
+}
+```
+
+#### `GET /api/years`
+Años soportados para predicción.
+
+```json
+{ "years": [2023, 2024, 2025, 2026] }
+```
+
+#### `POST /api/predict`
+Ejecuta la predicción para una carrera y año dados.
+
+**Request:**
+```json
+{ "race": "Monaco", "year": 2026 }
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "race_name": "Monaco Grand Prix",
+  "year": 2026,
+  "predictions": [
+    {
+      "position": 1,
+      "driver_code": "LEC",
+      "team": "Ferrari",
+      "grid_position": 1,
+      "score": 2.41,
+      "position_change": 0
+    }
+  ],
+  "podium": ["LEC", "NOR", "PIA"],
+  "gainers": [{ "driver": "NOR", "from_pos": 4, "to_pos": 2, "change": 2 }],
+  "losers":  [{ "driver": "VER", "from_pos": 2, "to_pos": 5, "change": -3 }]
+}
+```
+
+### CORS
+
+Configurado para `http://localhost:5173` (dev server de Vite). Para producción, editar `api.py:allow_origins`.
 
 ---
 
