@@ -46,6 +46,34 @@ MONOTONE_CONSTRAINTS = {
     'driver_dnf_rate': 1,          # Higher DNF rate -> worse expected result
     'team_avg_position_season': 1, # Worse team avg -> worse result
     'constructor_standing': 1,     # Worse standing -> worse result
+    'driver_experience': -1,       # More experience -> better expected result
+    'team_reliability_rate': -1,   # Higher reliability -> better expected result
+}
+
+
+# Centralized default values for features and fallbacks.
+# Single source of truth for missing-data defaults across data_loader,
+# feature engineering, and prediction paths.
+FEATURE_DEFAULTS: Dict[str, Any] = {
+    'driver_avg_position_last_5': 15.0,
+    'driver_circuit_avg_position': 15.0,
+    'driver_dnf_rate': 0.10,
+    'driver_experience': 0,
+    'team_avg_position_season': 15.0,
+    'team_reliability_rate': 0.90,
+    'constructor_standing': 5,
+    'quali_position': 15.0,
+    'quali_gap_to_pole': 1.0,
+    'quali_gap_to_teammate': 0.0,
+    'made_q3': 0,
+    'circuit_type': 2,
+    'circuit_length_km': 5.0,
+    'overtaking_difficulty': 3,
+    'number_of_laps': 55,
+    'gap_per_grid_slot': 0.3,
+    'grid_position': 15.0,
+    'is_wet_session': 0,
+    'temperature': 25.0,
 }
 
 

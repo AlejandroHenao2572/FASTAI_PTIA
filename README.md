@@ -1,198 +1,324 @@
-# FastAI - F1 Race Predictor 🏎️
+# F1 Race Predictor 🏎️
 
 Sistema de predicción de resultados de carreras de Fórmula 1 basado en Machine Learning.
 
-**Proyecto para Principios y Tecnologias de Inteligencia Artificial - PTIA**  
-**Escuela Colombiana de Ingenieria Julio Garavito**
+**Proyecto para Principios y Tecnologías de Inteligencia Artificial — PTIA**  
+**Escuela Colombiana de Ingeniería Julio Garavito**
 
-## Desarrollado por:
-- David Alejandro Patacon Henao
+## Desarrollado por
+- David Alejandro Patacón Henao
 - Samuel Antonio Gil Romero
+
+---
 
 ## Descripción
 
-Este proyecto utiliza **XGBoost** (Gradient Boosting) para predecir las posiciones finales de los pilotos en carreras de F1. Los datos se obtienen de la API oficial de F1 a través de la librería **FastF1**.
+Este proyecto implementa un pipeline completo de Machine Learning para predecir las posiciones finales de los 20 pilotos en una carrera de Fórmula 1. El modelo utiliza **XGBoost Regressor** entrenado sobre datos reales obtenidos de la API oficial de F1 a través de la librería **FastF1**.
 
-## Características
+La predicción se genera a partir de datos de clasificación (que ya ocurrieron) combinados con features históricas de piloto, equipo y circuito computadas sin data leakage.
 
-- 📊 **Datos reales**: Utiliza la API FastF1 para obtener datos oficiales de F1
-- 🤖 **XGBoost Regressor**: Modelo de gradient boosting con regularización
-- 📈 **18 features**: Incluyendo clasificación, históricos de piloto, equipo y circuito
-- 🔄 **Validación temporal**: Time-series cross-validation para evitar data leakage
-- 📉 **Métricas esenciales**: MAE, RMSE, Top-3 Accuracy
+---
 
 ## Estructura del Proyecto
 
 ```
-f1_predictor/
+fastai_ptia/
 ├── config/
-│   ├── settings.py          # Configuración centralizada
-│   └── circuits.py          # Metadata de circuitos
+│   ├── settings.py          # Hiperparámetros, constraints, FEATURE_DEFAULTS
+│   └── circuits.py          # Metadata de 24 circuitos (tipo, gap/slot, lat/lon)
 ├── data/
-│   ├── data_loader.py       # Carga datos desde FastF1
-│   └── cache/               # Cache de FastF1
+│   ├── data_loader.py       # Descarga desde FastF1 (carrera + clasificación + clima)
+│   ├── weather.py           # Fetch OpenWeatherMap para predict.py
+│   └── cache/               # Cache de FastF1 (no borrar)
 ├── features/
-│   └── engineering.py       # Feature engineering (18 features)
+│   └── engineering.py       # 18 features vectorizadas + export_historical_stats()
 ├── models/
-│   ├── trainer.py           # Entrenamiento XGBoost
-│   └── saved/               # Modelos guardados
+│   ├── trainer.py           # XGBoost + TimeSeriesSplit CV + monotone constraints
+│   └── saved/               # Modelos .pkl serializados
 ├── evaluation/
-│   └── metrics.py           # Métricas de evaluación
+│   └── metrics.py           # MAE, RMSE, Top-3 Accuracy
 ├── outputs/
-│   └── reports/             # Reportes JSON
-├── main.py                  # Pipeline de entrenamiento
-├── predict.py               # Script de predicción
-├── requirements.txt
-└── README.md
+│   └── reports/
+│       ├── training_report.json     # Métricas de CV + test + feature importances
+│       └── historical_stats.json    # Stats por piloto/equipo para predict.py
+├── main.py                  # Pipeline de entrenamiento (5 pasos)
+├── predict.py               # Inferencia (lee clasificación + historical_stats.json)
+└── requirements.txt
 ```
+
+---
+
+## Tecnologías
+
+| Tecnología | Versión | Uso |
+|-----------|---------|-----|
+| Python | 3.9+ | Lenguaje de programacion principal |
+| XGBoost | ≥2.0 | Modelo de predicción |
+| FastF1 | ≥3.3 | API de datos de F1 |
+| Pandas / NumPy | ≥2.0 / ≥1.24 | Manipulación de datos |
+| Scikit-learn | ≥1.3 | TimeSeriesSplit, utilidades |
+| Requests | ≥2.31 | Weather forecast fetch |
+| python-dotenv | ≥1.0 | Variables de entorno |
+
 
 ## Instalación
 
 ```bash
-# Crear entorno virtual
 python -m venv venv
-source venv/bin/activate  # Linux/Mac
-venv\Scripts\activate     # Windows
+source venv/bin/activate        # Linux/Mac
+# venv\Scripts\activate         # Windows
 
-# Instalar dependencias
 pip install -r requirements.txt
 ```
+
+### Variables de entorno opcionales
+
+```bash
+cp .env.example .env
+# Editar .env:
+OPENWEATHERMAP_API_KEY=tu_api_key   # Opcional: weather real en predict.py
+```
+
+---
 
 ## Uso
 
 ### Entrenar el modelo
 
 ```bash
-# Entrenar con datos de 2023, 2024, 2025
-
-# Especificar temporadas
+# Temporadas completas (primera vez: ~45-90 min por descarga de datos)
 python main.py --seasons 2023 2024 2025
 ```
+
+Los datos se cachean en `data/cache/`. Reentrenamientos posteriores toman segundos.
 
 ### Predecir una carrera
 
-Cabe aclarar que antes de hacer una prediccion ya debe de haber pasado la ronda de clasificacion real para poder cargar los datos desde FastF1 API, de lo contrario dara error y no generar la prediccion
+La clasificación del GP debe haber ocurrido antes de correr `predict.py` (se descarga de FastF1).
 
 ```bash
-# Predecir usando nombre de carrera y año
 python predict.py --race "Monaco" --year 2026
+python predict.py --race 6 --year 2026          # por número de ronda
+python predict.py --race "Monaco" --year 2026 --model models/saved/model.pkl
 ```
 
-## Features del Modelo
+---
 
-### Features de Clasificación (4)
+## Arquitectura del Pipeline
+
+```
+FastF1 API
+    │
+    ▼
+data/data_loader.py          ← Descarga carrera + clasificación + clima
+    │
+    ▼
+features/engineering.py      ← 18 features (vectorizadas, sin leakage)
+    │
+    ▼
+models/trainer.py            ← XGBoost + Time-Series CV
+    │
+    ├── evaluation/metrics.py ← MAE, RMSE, Top-3 Accuracy
+    ├── models/saved/*.pkl    ← Modelo serializado
+    └── outputs/reports/      ← training_report.json + historical_stats.json
+```
+
+El pipeline de entrenamiento y el de predicción comparten los **mismos features**
+
+---
+
+## Features del Modelo (18 total)
+
+### Clasificación (4)
+| Feature | Descripción | Fuente |
+|---------|-------------|--------|
+| `quali_position` | Posición en clasificación | FastF1 Q session |
+| `quali_gap_to_pole` | Diferencia en segundos al poleman (calibrada por circuito) | FastF1 Q session |
+| `quali_gap_to_teammate` | Diferencia vs compañero de equipo | Calculado |
+| `made_q3` | Si el piloto llegó a Q3 | FastF1 Q session |
+
+### Históricas de Piloto (4)
+| Feature | Descripción | Método de cómputo |
+|---------|-------------|-------------------|
+| `driver_avg_position_last_5` | Promedio de posición final, últimas 5 carreras | Rolling mean (shift 1) |
+| `driver_circuit_avg_position` | Promedio histórico en este circuito | Expanding mean por (piloto, circuito) |
+| `driver_dnf_rate` | Tasa de abandonos (DNFs / total carreras) | Expanding mean |
+| `driver_experience` | Número de carreras completadas | Cumcount |
+
+### De Equipo (3)
+| Feature | Descripción | Método de cómputo |
+|---------|-------------|-------------------|
+| `team_avg_position_season` | Promedio del equipo en la temporada hasta esa fecha | Expanding mean por (equipo, año) |
+| `team_reliability_rate` | Porcentaje de llegadas al final | Expanding mean |
+| `constructor_standing` | Posición en el campeonato de constructores | Ranking por puntos acumulados (rondas anteriores) |
+
+### De Circuito (4)
 | Feature | Descripción |
 |---------|-------------|
-| `quali_position` | Posición en clasificación |
-| `quali_gap_to_pole` | Diferencia en segundos al poleman |
-| `quali_gap_to_teammate` | Diferencia vs compañero |
-| `made_q3` | Si llegó a Q3 |
-
-### Features Históricas de Piloto (4)
-| Feature | Descripción |
-|---------|-------------|
-| `driver_avg_position_last_5` | Promedio últimas 5 carreras |
-| `driver_circuit_avg_position` | Promedio en ese circuito |
-| `driver_dnf_rate` | Tasa de abandonos |
-| `driver_experience` | Número de carreras |
-
-### Features de Equipo (3)
-| Feature | Descripción |
-|---------|-------------|
-| `team_avg_position_season` | Promedio del equipo |
-| `team_reliability_rate` | Fiabilidad del equipo |
-| `constructor_standing` | Posición en campeonato |
-
-### Features de Circuito (4)
-| Feature | Descripción |
-|---------|-------------|
-| `circuit_type` | Tipo (calle/permanente/híbrido) |
+| `circuit_type` | Tipo: 1=Calle, 2=Permanente, 3=Híbrido |
 | `circuit_length_km` | Longitud en km |
-| `overtaking_difficulty` | Dificultad adelantamiento (1-5) |
+| `overtaking_difficulty` | Dificultad de adelantamiento (1–5) |
 | `number_of_laps` | Número de vueltas |
 
-### Features de Grid y Condiciones (3)
+### Grid y Condiciones (3)
 | Feature | Descripción |
 |---------|-------------|
 | `grid_position` | Posición de salida |
-| `is_wet_session` | Lluvia prevista |
-| `temperature` | Temperatura ambiente |
+| `is_wet_session` | Lluvia esperada (fetch real via OpenWeatherMap si API key disponible) |
+| `temperature` | Temperatura ambiente (°C) |
 
-## Métricas de Evaluación
+---
 
-| Métrica | Descripción | Objetivo |
-|---------|-------------|----------|
-| **MAE** | Mean Absolute Error | < 3.5 posiciones |
-| **RMSE** | Root Mean Squared Error | < 4.5 posiciones |
-| **Top-3 Accuracy** | Acierto en podio | > 60% |
+## Modelo: XGBoost Regressor
 
-## Estrategia de Validación
-
-```
-Temporada 2023        Temporada 2024           Test
-┌──────────────┐    ┌──────────────────────┐  ┌────────────┐
-│  TRAINING    │    │ TRAINING │ VALIDATION│  │   TEST     │
-│  22 carreras │    │ 20 carr. │  4 carr.  │  │ 4 carreras │
-└──────────────┘    └──────────────────────┘  └────────────┘
-```
-
-- **Time-Series Cross-Validation**: 5 folds con ordenamiento temporal
-- **Sin data leakage**: Features históricas calculadas solo con datos pasados
-- **Test final**: Últimas 4 carreras de la temporada
-
-## Hiperparámetros del Modelo
+### Hiperparámetros
 
 ```python
 XGBOOST_PARAMS = {
-    'n_estimators': 150,
-    'max_depth': 4,
-    'learning_rate': 0.05,
-    'subsample': 0.8,
+    'objective': 'reg:squarederror',
+    'n_estimators': 150,       # Balance rendimiento / overfitting
+    'max_depth': 4,            # Previene árboles excesivamente complejos
+    'learning_rate': 0.05,     # Aprendizaje conservador → mejor generalización
+    'subsample': 0.8,          # Aleatoriedad → reduce overfitting
     'colsample_bytree': 0.8,
-    'reg_alpha': 0.1,
-    'reg_lambda': 1.0,
+    'min_child_weight': 5,     # Evita splits en muestras muy pequeñas
+    'reg_alpha': 0.1,          # Regularización L1
+    'reg_lambda': 1.0,         # Regularización L2
 }
 ```
 
-**Justificación:**
-- `n_estimators=150`: Balance entre rendimiento y overfitting
-- `max_depth=4`: Previene árboles excesivamente complejos
-- `learning_rate=0.05`: Aprendizaje conservador para mejor generalización
-- `reg_alpha/lambda`: Regularización L1/L2 para suavizar predicciones
+### Restricciones Monotónicas
 
-## Tecnologías Utilizadas
+El modelo aplica restricciones de dominio sobre 8 features para que las predicciones respeten relaciones lógicas del deporte:
 
-- **Python 3.9+**
-- **XGBoost**: Gradient boosting
-- **FastF1**: API oficial de datos de F1
-- **Pandas/NumPy**: Manipulación de datos
-- **Scikit-learn**: Utilidades de ML
-- **Matplotlib/Seaborn**: Visualización
+| Feature | Restricción | Lógica |
+|---------|-------------|--------|
+| `quali_position` | +1 (creciente) | Peor clasificación → peor resultado |
+| `grid_position` | +1 | Peor salida → peor resultado |
+| `quali_gap_to_pole` | +1 | Mayor brecha al pole → peor resultado |
+| `driver_dnf_rate` | +1 | Mayor tasa de abandono → peor resultado esperado |
+| `team_avg_position_season` | +1 | Peor promedio del equipo → peor resultado |
+| `constructor_standing` | +1 | Peor posición en el campeonato → peor resultado |
+| `driver_experience` | -1 (decreciente) | Más experiencia → mejor resultado esperado |
+| `team_reliability_rate` | -1 | Mayor fiabilidad → mejor resultado esperado |
 
+---
 
-## EJEMPLO DE USO
-Entrenar modelo:
+## Estrategia de Validación
+
+### Temporal Split
+
+El dataset se ordena cronológicamente y se divide respetando el tiempo:
+
+```
+Temporada 2023          Temporada 2024          Temporada 2025
+┌────────────────┐    ┌─────────────────────┐  ┌────────────────────────────┐
+│   TRAINING     │    │   TRAINING          │  │  TRAINING   │  TEST (últimas│
+│   22 carreras  │    │   24 carreras       │  │  20 carr.   │  4 carreras)  │
+└────────────────┘    └─────────────────────┘  └────────────────────────────┘
+                                                               Rondas 21–24
+```
+
+- **Train total**: 1318 muestras (pilotos × carreras)
+- **Test**: 80 muestras — últimas 4 carreras de la temporada 2025 (rondas 21–24)
+
+### Time-Series Cross-Validation (5 folds)
+
+```
+Fold 1: ████░░░░░░░░░░░░░░░░░░░   Train: 223  Val: 219
+Fold 2: ████████░░░░░░░░░░░░░░░   Train: 442  Val: 219
+Fold 3: ████████████░░░░░░░░░░░   Train: 661  Val: 219
+Fold 4: ████████████████░░░░░░░   Train: 880  Val: 219
+Fold 5: ████████████████████░░░   Train:1099  Val: 219
+```
+
+---
+
+## Resultados
+
+### Cross-Validation (datos 2023–2025, sobre training set)
+
+| Fold | Train | Val | MAE | RMSE |
+|------|-------|-----|-----|------|
+| 1 | 223 | 219 | 3.61 | 5.06 |
+| 2 | 442 | 219 | 2.83 | 3.85 |
+| 3 | 661 | 219 | 2.90 | 3.94 |
+| 4 | 880 | 219 | 2.87 | 3.99 |
+| 5 | 1099 | 219 | 3.32 | 4.49 |
+| **Media** | | | **3.11 ± 0.31** | **4.26 ± 0.46** |
+
+> El Fold 1 tiene mayor error porque entrena con pocos datos históricos. A partir del Fold 2 el modelo se estabiliza con MAE ~2.87–2.90.
+
+### Test Set — Últimas 4 Carreras de 2025 (rondas 21–24)
+
+| Métrica | Resultado | Objetivo |
+|---------|-----------|----------|
+| **MAE** | **3.58 posiciones** | < 3.5 |
+| **RMSE** | **4.84 posiciones** | < 4.5 |
+| **Top-3 Accuracy** | **66.7%** | > 60% |
+| Muestras evaluadas | 80 | — |
+
+- El MAE de 3.58 significa que en promedio el modelo se equivoca en ~3.5 posiciones respecto al resultado real.
+- Top-3 Accuracy de 66.7% indica que 2 de cada 3 veces el modelo acierta quién debería estar en el podio.
+
+### Importancia de Features
+
+| Ranking | Feature | Importancia |
+|---------|---------|-------------|
+| 1 | `quali_position` | **36.7%** |
+| 2 | `grid_position` | **23.1%** |
+| 3 | `quali_gap_to_pole` | **10.0%** |
+| 4 | `team_avg_position_season` | 5.2% |
+| 5 | `team_reliability_rate` | 4.6% |
+| 6 | `constructor_standing` | 4.4% |
+| 7 | `driver_dnf_rate` | 3.1% |
+| 8 | `driver_circuit_avg_position` | 2.3% |
+| 9 | `driver_avg_position_last_5` | 2.3% |
+| 10 | `made_q3` | 2.2% |
+| 11 | `driver_experience` | 1.7% |
+| 12 | `quali_gap_to_teammate` | 1.7% |
+| 13 | `temperature` | 1.5% |
+| 14 | `is_wet_session` | 1.2% |
+| — | `circuit_type`, `circuit_length_km`, `overtaking_difficulty`, `number_of_laps` | 0.0% |
+
+**Hallazgos clave:**
+- La posición de clasificación concentra el 60% de la importancia total (posición + gap al pole + haber llegado a Q3). Confirma que en F1 la clasificación es el predictor más fuerte del resultado.
+- Los features de equipo (`team_avg`, `reliability`, `constructor_standing`) suman ~14%, reflejando el peso de la competitividad del coche.
+- Los 4 features de circuito tienen importancia 0.0%, lo que sugiere que el modelo captura el efecto del circuito de forma indirecta a través de los resultados históricos de piloto y equipo.
+
+---
+
+## Ejemplo de Uso Completo
+
+### Entrenamiento
+
+```bash
 python main.py --seasons 2023 2024 2025
-
-Output:
-```
-Summary:
-  - Model: XGBoost Regressor
-  - Training samples: 1019
-  - Test samples: 79
-  - Features: 18
-  
-Test Set Performance:
-  - MAE: 2.90 positions
-  - RMSE: 3.82 positions
-  - Top-3 Accuracy: 71.4% 
 ```
 
-Predecir una carrera:
+```
+╔═══════════════════════════════════════════════════════════════╗
+║     F1 RACE PREDICTOR - TRAINING PIPELINE                    ║
+╚═══════════════════════════════════════════════════════════════╝
 
+STEP 5: Evaluation on Test Set
+--------------------------------------
+  MAE  : 3.58 positions
+  RMSE : 4.84 positions
+  Top-3: 66.7%
+
+STEP 6: Saving Results
+  Model saved to: models/saved/xgboost_model_20260517_175003.pkl
+  Report saved to: outputs/reports/training_report.json
+  Historical stats saved to: outputs/reports/historical_stats.json
+```
+
+### Predicción — Gran Premio de Japón 2026
+
+```bash
 python predict.py --race "Japon" --year 2026
+```
 
-Output
 ```
 ╔═══════════════════════════════════════════════════════════════╗
 ║                    F1 RACE PREDICTION                         ║
@@ -200,7 +326,7 @@ Output
 ║  Japanese Grand Prix                                          ║
 ║  Season 2026                                                  ║
 ╚═══════════════════════════════════════════════════════════════╝
-    
+
 =================================================================
  POS DRIVER TEAM                        GRID    SCORE
 =================================================================
@@ -212,23 +338,13 @@ Output
  P06 HAM    Ferrari                        6     5.35
  P07 HAD    Red Bull Racing                8     7.01
  P08 VER    Red Bull Racing               11     9.28
- P09 GAS    Alpine                         7    10.19
- P10 BOR    Audi                           9    11.54
- P11 LIN    Racing Bulls                  10    12.42
- P12 COL    Alpine                        15    13.45
- P13 OCO    Haas F1 Team                  12    13.55
- P14 LAW    Racing Bulls                  14    13.78
- P15 HUL    Audi                          13    14.00
- P16 SAI    Williams                      16    15.19
- P17 BEA    Haas F1 Team                  18    15.26
- P18 ALB    Williams                      17    15.97
- P19 PER    Cadillac                      19    16.30
- P20 STR    Aston Martin                  22    16.42
- P21 BOT    Cadillac                      20    16.64
- P22 ALO    Aston Martin                  21    17.52
+ ...
 =================================================================
 ```
-Resultados reales:  
-![alt text](img/image.png)
 
->El modelo predijo correctamente el resultado de las primeras 5 posiciones del grand Prix de japon 2026
+Resultado real:
+
+![Resultados reales GP Japón 2026](img/image.png)
+
+> **El modelo predijo correctamente las primeras 5 posiciones del Grand Prix de Japón 2026.**
+

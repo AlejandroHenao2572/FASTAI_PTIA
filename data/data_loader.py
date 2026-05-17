@@ -409,17 +409,14 @@ class F1DataLoader:
                         row['quali_position'] = driver_quali['quali_position']
                         row['quali_gap_to_pole'] = driver_quali['quali_gap_to_pole']
                         row['made_q3'] = driver_quali['made_q3']
-                        row['best_quali_time'] = driver_quali['best_quali_time']
                     else:
                         row['quali_position'] = driver_race['grid_position']
                         row['quali_gap_to_pole'] = np.nan
                         row['made_q3'] = 0
-                        row['best_quali_time'] = np.nan
                 else:
                     row['quali_position'] = driver_race['grid_position']
                     row['quali_gap_to_pole'] = np.nan
                     row['made_q3'] = 0
-                    row['best_quali_time'] = np.nan
                 
                 rows.append(row)
         

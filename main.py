@@ -32,7 +32,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from config.settings import Settings
 from data.data_loader import F1DataLoader
-from features.engineering import FeatureEngineer
+from features.engineering import FeatureEngineer, export_historical_stats
 from models.trainer import F1ModelTrainer
 from evaluation.metrics import evaluate_predictions, print_evaluation_report
 
@@ -235,6 +235,16 @@ def main():
     with open(report_path, 'w') as f:
         json.dump(report, f, indent=2, default=str)
     print(f"Report saved to: {report_path}")
+
+    # Persist historical stats for the prediction path (eliminates train/serve
+    # skew vs. hardcoded dicts in predict.py).
+    stats_payload = export_historical_stats(df)
+    stats_payload['trained_at'] = datetime.now().isoformat()
+    stats_payload['training_seasons'] = settings.training_seasons
+    stats_path = settings.reports_dir / 'historical_stats.json'
+    with open(stats_path, 'w') as f:
+        json.dump(stats_payload, f, indent=2, default=str)
+    print(f"Historical stats saved to: {stats_path}")
     print("\n" + "="*60)
     print("TRAINING COMPLETE")
     print("="*60)
